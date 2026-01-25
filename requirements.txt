@@ -1,0 +1,6 @@
+pdfplumber
+python-docx
+requests
+beautifulsoup4
+spacy
+sentence-transformers
