@@ -15,6 +15,8 @@ from ai_engine.rewrite_resume import (
 )
 from ai_engine.validate_resume import validate_resume_content
 from generator.generate_latex import generate_resume_latex, parse_resume_text
+from ai_engine.cover_letter import generate_cover_letter
+from generator.cover_letter_latex import generate_cover_letter_latex
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Resume Tailor AI", page_icon="📄")
@@ -49,7 +51,15 @@ with col1:
         placeholder="https://www.linkedin.com/in/your-profile"
     )
 
-    generate_btn = st.button("Generate Tailored Resume")
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        generate_btn = st.button("📄 Generate Resume", use_container_width=True)
+    with btn_col2:
+        generate_cl_btn_top = st.button(
+            "✉️ Generate Cover Letter",
+            use_container_width=True,
+            disabled=not bool(st.session_state.get('tailored_text')),
+        )
 
 with col2:
     st.header("Generated Resume")
@@ -69,6 +79,7 @@ with col2:
                     # ── Step 2: Extract JD requirements ───────────────────────
                     st.info("Extracting skills and keywords from JD...")
                     jd_info = extract_skills_and_keywords(jd_text)
+                    st.session_state['jd_info_cache'] = jd_info
 
                     # ── Step 3: Parse resume PDF ──────────────────────────────
                     st.info("Parsing your resume...")
@@ -83,6 +94,7 @@ with col2:
                     # URL here means it will be found and added to the header.
                     if linkedin_url and linkedin_url.strip():
                         resume_text = f"LinkedIn: {linkedin_url.strip()}\n" + resume_text
+                    st.session_state['linkedin_url_cache'] = linkedin_url
 
                     # ── Step 4: Extract known companies & projects ────────────
                     st.info("Extracting content inventory from resume...")
@@ -195,3 +207,44 @@ with col2:
         # Optionally show raw LLM output text for debugging
         with st.expander("View raw resume text (debug)"):
             st.text(st.session_state.tailored_text or "")
+
+
+    # ── Cover Letter generation (triggered by top button) ────────────────────
+    if generate_cl_btn_top:
+        if not st.session_state.get("tailored_text"):
+            st.warning("Please generate the resume first.")
+        else:
+            with st.spinner("Writing cover letter..."):
+                try:
+                    cl_data = generate_cover_letter(
+                        tailored_resume_text = st.session_state.tailored_text,
+                        jd_info              = st.session_state.get("jd_info_cache", {}),
+                        candidate_name       = st.session_state.candidate_name,
+                        linkedin_url         = st.session_state.get("linkedin_url_cache", ""),
+                    )
+
+                    cl_timestamp  = int(time.time() * 1000)
+                    cl_output_dir = "outputs/pdf"
+                    cl_pdf_path   = os.path.join(cl_output_dir, f"cover_letter_{cl_timestamp}.pdf")
+                    os.makedirs(cl_output_dir, exist_ok=True)
+
+                    generate_cover_letter_latex(cl_data, cl_pdf_path)
+
+                    with open(cl_pdf_path, "rb") as cl_file:
+                        st.session_state["cl_bytes"] = cl_file.read()
+
+                    st.success("Cover letter generated!")
+
+                except Exception as e:
+                    st.error(f"Cover letter error: {str(e)}")
+                    st.exception(e)
+
+    if st.session_state.get("cl_bytes"):
+        st.markdown("---")
+        st.subheader("Cover Letter")
+        st.download_button(
+            label="⬇️ Download Cover Letter PDF",
+            data=st.session_state["cl_bytes"],
+            file_name="cover_letter.pdf",
+            mime="application/pdf",
+        )
