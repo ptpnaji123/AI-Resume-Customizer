@@ -14,3 +14,9 @@ outputs/
 # OS / editor
 .DS_Store
 .vscode/
+
+
+# Input resumes (personal)
+data/input_resume/
+
+
